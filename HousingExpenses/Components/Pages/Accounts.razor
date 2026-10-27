@@ -1,0 +1,229 @@
+﻿@page "/accounts"
+@using HousingExpenses.Services
+@using HousingExpenses.Models
+@using Microsoft.EntityFrameworkCore
+@inject AccountService AccountService
+@inject HousingExpenses.DbContext.AppDbContext DbContext
+
+<PageTitle>الحسابات النهائية</PageTitle>
+
+<div class="container mt-4 accounts-page" dir="rtl">
+
+    <div class="accounts-heading">
+        <h3 class="mb-4">الحسابات النهائية للأشخاص</h3>
+        <p>ملخص المستحقات والمبالغ المدفوعة لكل شخص خلال الشهر المحدد.</p>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(message))
+    {
+        <div class="alert @messageClass">@message</div>
+    }
+
+    <div class="card shadow-sm accounts-month-card mb-4">
+        <div class="card-body accounts-month-body">
+            <div class="accounts-month-label">
+                <span class="accounts-month-icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <rect x="3" y="5" width="18" height="16" rx="2" />
+                        <path d="M16 3v4M8 3v4M3 10h18" />
+                    </svg>
+                </span>
+                <div>
+                    <strong>الشهر</strong>
+                    <small>اختر الشهر المطلوب لعرض حساباته</small>
+                </div>
+            </div>
+
+            <select class="form-select"
+                    @bind="selectedMonthId"
+                    @bind:after="LoadAccountsAsync"
+                    disabled="@loading">
+                @foreach (var month in months)
+                {
+                    <option value="@month.Id">
+                        @month.MonthName @(month.IsArchived ? "(مؤرشف)" : "")
+                    </option>
+                }
+            </select>
+        </div>
+    </div>
+
+    @if (loading)
+    {
+        <div class="accounts-empty">
+            جارٍ تحميل الحسابات...
+        </div>
+    }
+    else if (accounts.Count == 0)
+    {
+        <div class="accounts-empty">
+            <div class="accounts-empty-icon">د.ل</div>
+            <h5>لا توجد حسابات لعرضها</h5>
+            <p>ستظهر الحسابات هنا بعد تسجيل المصروفات.</p>
+        </div>
+    }
+    else
+    {
+        <div class="card shadow-sm accounts-table-card">
+            <div class="accounts-table-heading">
+                <div>
+                    <h5>الحسابات النهائية</h5>
+                    <p>جميع حسابات الأشخاص في الشهر المحدد.</p>
+                </div>
+
+                <span class="accounts-record-count">
+                    @accounts.Count أشخاص
+                </span>
+            </div>
+
+            <div class="table-responsive accounts-table-wrap">
+                <table class="table table-hover accounts-table mb-0">
+                    <thead>
+                        <tr>
+                            <th>الشخص</th>
+                            <th>المستحق عليه</th>
+                            <th>دفع للمشتريات</th>
+                            <th>صافي الحساب</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        @foreach (var account in accounts)
+                        {
+                            <tr @key="account.PersonId">
+                                <td>
+                                    <span class="account-person-name">
+                                        @account.FullName
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span class="account-money">
+                                        @account.TotalOwed.ToString("N2") د.ل
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span class="account-money">
+                                        @account.TotalPaid.ToString("N2") د.ل
+                                    </span>
+                                </td>
+
+                                <td>
+                                    @if (account.Balance > 0)
+                                    {
+                                        <span class="account-balance account-balance-positive">
+                                            <span>له</span>
+                                            @account.Balance.ToString("N2") د.ل
+                                        </span>
+                                    }
+                                    else if (account.Balance < 0)
+                                    {
+                                        <span class="account-balance account-balance-negative">
+                                            <span>عليه</span>
+                                            @Math.Abs(account.Balance).ToString("N2") د.ل
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="account-balance account-balance-zero">
+                                            حسابه مصفّى
+                                        </span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+
+                    <tfoot>
+                        <tr>
+                            <th>الإجمالي</th>
+
+                            <th>
+                                @accounts.Sum(a => a.TotalOwed).ToString("N2") د.ل
+                            </th>
+
+                            <th>
+                                @accounts.Sum(a => a.TotalPaid).ToString("N2") د.ل
+                            </th>
+
+                            <th>
+                                <span class="accounts-total-balance">
+                                    @accounts.Sum(a => a.Balance).ToString("N2") د.ل
+                                </span>
+                            </th>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<HousingMonth> months = new();
+    private List<PersonAccount> accounts = new();
+
+    private int selectedMonthId;
+    private bool loading;
+
+    private string message = string.Empty;
+    private string messageClass = "alert-info";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            months = await DbContext.Months
+                .AsNoTracking()
+                .OrderByDescending(m => m.StartDate)
+                .ToListAsync();
+
+            var currentMonth = months.FirstOrDefault(m => !m.IsArchived);
+
+            if (currentMonth is not null)
+                selectedMonthId = currentMonth.Id;
+            else if (months.Count > 0)
+                selectedMonthId = months[0].Id;
+
+            await LoadAccountsAsync();
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"تعذر تحميل البيانات: {ex.Message}", false);
+            Console.WriteLine(ex);
+        }
+    }
+
+    private async Task LoadAccountsAsync()
+    {
+        if (selectedMonthId <= 0)
+        {
+            accounts = new();
+            return;
+        }
+
+        loading = true;
+        message = string.Empty;
+
+        try
+        {
+            accounts = await AccountService.GetMonthlyAccountsAsync(selectedMonthId);
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"تعذر تحميل الحسابات: {ex.Message}", false);
+            Console.WriteLine(ex);
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private void ShowMessage(string text, bool success)
+    {
+        message = text;
+        messageClass = success ? "alert-success" : "alert-danger";
+    }
+}

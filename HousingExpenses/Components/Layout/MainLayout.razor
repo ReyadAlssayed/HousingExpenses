@@ -1,0 +1,55 @@
+﻿@inherits LayoutComponentBase
+@inject NavigationManager Navigation
+
+@if (!Navigation.ToBaseRelativePath(Navigation.Uri)
+    .TrimEnd('/')
+    .Equals("", StringComparison.OrdinalIgnoreCase))
+{
+    <div class="app-shell" dir="rtl">
+        <header class="topbar">
+            <a href="/" class="brand">
+                <span class="brand-icon">H</span>
+                <span class="brand-text">
+                    <strong>HousingExpenses</strong>
+                    <small>إدارة مصروفات السكن</small>
+                </span>
+            </a>
+
+            <nav class="topnav">
+                <NavLink href="/people" class="nav-item">
+                    <span class="nav-icon">👤</span>
+                    <span>الأشخاص</span>
+                </NavLink>
+
+                <NavLink href="/expenses" class="nav-item">
+                    <span class="nav-icon">▤</span>
+                    <span>المصروفات</span>
+                </NavLink>
+
+                <NavLink href="/accounts" class="nav-item">
+                    <span class="nav-icon">◉</span>
+                    <span>الحسابات</span>
+                </NavLink>
+            </nav>
+        </header>
+
+        <main class="main-content">
+            @Body
+        </main>
+
+        <footer class="app-footer">
+            <span>HousingExpenses</span>
+            <span>إدارة مالية بسيطة ومنظمة</span>
+        </footer>
+    </div>
+}
+else
+{
+    @Body
+}
+
+<div id="blazor-error-ui" data-nosnippet>
+    حدث خطأ غير متوقع.
+    <a href="." class="reload">إعادة التحميل</a>
+    <span class="dismiss">🗙</span>
+</div>

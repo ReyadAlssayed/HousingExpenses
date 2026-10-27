@@ -1,0 +1,288 @@
+﻿@page "/people"
+@using HousingExpenses.Models
+@using HousingExpenses.Services
+@inject PersonService PersonService
+
+<PageTitle>إدارة الأشخاص</PageTitle>
+
+<div class="people-page" dir="rtl">
+    <div class="people-heading">
+        <div>
+
+            <h1>الأشخاص</h1>
+            <p>إدارة أعضاء السكن وحالة اشتراكهم بسهولة.</p>
+        </div>
+
+        <div class="people-total">
+            <span class="people-total-number">@people.Count</span>
+            <span>إجمالي الأشخاص</span>
+        </div>
+    </div>
+
+    <section class="people-add-card">
+        <div class="section-heading">
+            <div class="section-icon">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                    <circle cx="10" cy="7" r="4" />
+                    <path d="M19 8v6M22 11h-6" />
+                </svg>
+            </div>
+            <div>
+                <h2>إضافة شخص جديد</h2>
+                <p>أدخل الاسم لإضافته إلى قائمة السكن.</p>
+            </div>
+        </div>
+
+        <div class="people-add-form">
+            <input class="form-control people-name-input"
+                   @bind="fullName"
+                   @bind:event="oninput"
+                   placeholder="مثال: رياض"
+                   disabled="@loading" />
+
+            <button class="btn btn-primary people-add-button"
+                    @onclick="AddPersonAsync"
+                    disabled="@loading">
+                @if (loading)
+                {
+                    <span>جارٍ التنفيذ...</span>
+                }
+                else
+                {
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 5v14M5 12h14" />
+                    </svg>
+                    <span>إضافة الشخص</span>
+                }
+            </button>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(message))
+        {
+            <div class="app-toast @(messageClass == "alert-success" ? "success" : "error")">
+                @message
+            </div>
+        }
+    </section>
+
+    <div class="people-list-heading">
+        <div>
+            <h2>قائمة الأشخاص</h2>
+            <p>يمكنك تفعيل أي شخص أو تعطيله دون حذف سجله.</p>
+        </div>
+
+        <span class="people-count-badge">@people.Count شخص</span>
+    </div>
+
+    @if (loading && people.Count == 0)
+    {
+        <div class="people-empty">جارٍ تحميل الأشخاص...</div>
+    }
+    else if (people.Count == 0)
+    {
+        <div class="people-empty">
+            <div class="empty-icon">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="12" cy="8" r="4" />
+                    <path d="M4 21v-2a8 8 0 0 1 16 0v2" />
+                </svg>
+            </div>
+            <h3>لا يوجد أشخاص بعد</h3>
+            <p>أضف أول شخص باستخدام النموذج أعلاه.</p>
+        </div>
+    }
+    else
+    {
+        <div class="people-grid">
+            @foreach (var person in people)
+            {
+                var colorIndex = Math.Abs(person.Id % 6);
+
+                <article class="person-card" @key="person.Id">
+                    <div class="person-avatar avatar-@colorIndex">
+                        @if (!string.IsNullOrWhiteSpace(person.FullName) &&
+                             person.FullName.Contains("رياض", StringComparison.Ordinal))
+                        {
+                            <img src="Images/Profile.jpeg"
+                                 alt=""
+                                 title="@person.FullName" />
+                        }
+                        else
+                        {
+                            <span>@GetInitial(person.FullName)</span>
+                        }
+                    </div>
+
+                    <div class="person-info">
+                        <h3>@person.FullName</h3>
+
+                        <span class="person-role">
+                            عضو في السكن
+                        </span>
+
+                        <span class="person-status @(person.IsActive ? "status-active" : "status-inactive")">
+                            <span class="status-dot"></span>
+                            @(person.IsActive ? "نشط" : "غير نشط")
+                        </span>
+                    </div>
+
+                    <div class="person-actions">
+                        <button class="person-menu-button"
+                                title="@(person.IsActive ? "تعطيل الشخص" : "تفعيل الشخص")"
+                                aria-label="@(person.IsActive ? "تعطيل الشخص" : "تفعيل الشخص")"
+                                disabled="@loading"
+                                @onclick="() => TogglePersonAsync(person)">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <circle cx="12" cy="5" r="1.5" />
+                                <circle cx="12" cy="12" r="1.5" />
+                                <circle cx="12" cy="19" r="1.5" />
+                            </svg>
+                        </button>
+
+                        <button class="person-toggle-button @(person.IsActive ? "toggle-deactivate" : "toggle-activate")"
+                                disabled="@loading"
+                                @onclick="() => TogglePersonAsync(person)">
+                            @(person.IsActive ? "تعطيل" : "تفعيل")
+                        </button>
+                    </div>
+                </article>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private List<Person> people = new();
+    private string fullName = string.Empty;
+    private string message = string.Empty;
+    private string messageClass = "alert-info";
+    private bool loading;
+    private CancellationTokenSource? toastCts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPeopleAsync();
+    }
+
+    private async Task LoadPeopleAsync()
+    {
+        try
+        {
+            people = await PersonService.GetAllAsync();
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"تعذر تحميل الأشخاص: {ex.Message}", false);
+        }
+    }
+
+    private string GetInitial(string name)
+    {
+        return string.IsNullOrWhiteSpace(name)
+            ? "؟"
+            : name.Trim()[0].ToString();
+    }
+
+    private async Task HandleEnterAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await AddPersonAsync();
+    }
+
+    private async Task AddPersonAsync()
+    {
+        if (loading)
+            return;
+
+        if (string.IsNullOrWhiteSpace(fullName))
+        {
+            ShowMessage("أدخل اسم الشخص أولًا.", false);
+            return;
+        }
+
+        loading = true;
+        message = string.Empty;
+
+        try
+        {
+            bool added = await PersonService.AddAsync(fullName);
+
+            if (!added)
+            {
+                ShowMessage("الاسم مسجل مسبقًا أو غير صالح.", false);
+                return;
+            }
+
+            string addedName = fullName.Trim();
+            fullName = string.Empty;
+
+            await LoadPeopleAsync();
+            ShowMessage($"تمت إضافة «{addedName}» بنجاح.", true);
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"فشلت الإضافة: {ex.Message}", false);
+            Console.WriteLine(ex);
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task TogglePersonAsync(Person person)
+    {
+        if (loading)
+            return;
+
+        loading = true;
+        message = string.Empty;
+
+        try
+        {
+            bool updated = await PersonService.SetActiveAsync(
+                person.Id, !person.IsActive);
+
+            if (!updated)
+            {
+                ShowMessage("لم يتم العثور على الشخص.", false);
+                return;
+            }
+
+            await LoadPeopleAsync();
+            ShowMessage("تم تحديث حالة الشخص.", true);
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"فشل تحديث الحالة: {ex.Message}", false);
+            Console.WriteLine(ex);
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async void ShowMessage(string text, bool success)
+    {
+        toastCts?.Cancel();
+        toastCts?.Dispose();
+        toastCts = new CancellationTokenSource();
+        var token = toastCts.Token;
+
+        message = text;
+        messageClass = success ? "alert-success" : "alert-danger";
+
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            await Task.Delay(2000, token);
+            message = string.Empty;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+}

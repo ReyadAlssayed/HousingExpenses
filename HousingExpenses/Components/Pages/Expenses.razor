@@ -1,0 +1,636 @@
+﻿@page "/expenses"
+@using HousingExpenses.Models
+@using HousingExpenses.Services
+@using Microsoft.EntityFrameworkCore
+@inject ExpenseService ExpenseService
+@inject PersonService PersonService
+@inject HousingExpenses.DbContext.AppDbContext DbContext
+@inject IJSRuntime JS
+
+<PageTitle>المصروفات</PageTitle>
+
+<div class="container mt-4 expenses-page" dir="rtl">
+    <div class="expenses-heading">
+        <div>
+
+            <h3 class="mb-4">مصروفات السكن</h3>
+            <p>تسجيل المشتريات ومتابعة المصروفات المشتركة.</p>
+        </div>
+
+        <button type="button"
+                class="btn btn-primary expense-add-button"
+                @onclick="OpenAddExpenseModal">
+            <span>+</span>
+            إضافة مصروف
+        </button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(message))
+    {
+        <div class="app-toast @(messageClass == "alert-success" ? "" : "error")">
+            @message
+        </div>
+    }
+
+    @* نافذة إضافة المصروف *@
+    @if (showAddExpenseModal)
+    {
+        <div class="expense-modal-backdrop"
+             @onclick="CloseAddExpenseModal">
+
+            <section class="card shadow-sm expense-form-card expense-modal"
+                     role="dialog"
+                     aria-modal="true"
+                     aria-labelledby="expense-modal-title"
+                     @onclick:stopPropagation="true">
+
+                <div class="expense-modal-header">
+                    <div class="expense-section-heading">
+                        <div class="expense-section-icon">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M12 5v14M5 12h14" />
+                            </svg>
+                        </div>
+
+                        <div>
+                            <h5 id="expense-modal-title">إضافة مصروف جديد</h5>
+                            <p>أدخل بيانات المصروف وحدد الأشخاص المستفيدين منه.</p>
+                        </div>
+                    </div>
+
+                    <button type="button"
+                            class="expense-modal-close"
+                            aria-label="إغلاق"
+                            disabled="@saving"
+                            @onclick="CloseAddExpenseModal">
+                        ✕
+                    </button>
+                </div>
+
+                <div class="card-body">
+                    <EditForm Model="form" OnValidSubmit="AddExpenseAsync">
+                        <DataAnnotationsValidator />
+
+                        <div class="expense-fields-grid">
+                            <div class="expense-field expense-description">
+                                <label class="form-label">وصف المصروف</label>
+                                <InputText class="form-control"
+                                           @bind-Value="form.Description"
+                                           placeholder="مثال: خبزة، مياه، منظفات"
+                                           disabled="@saving" />
+                            </div>
+
+                            <div class="expense-field">
+                                <label class="form-label">المبلغ (د.ل)</label>
+                                <InputNumber class="form-control"
+                                             @bind-Value="form.Amount"
+                                             step="0.01"
+                                             min="0.01"
+                                             disabled="@saving" />
+                            </div>
+
+                            <div class="expense-field">
+                                <label class="form-label">من دفع المبلغ؟</label>
+                                <InputSelect class="form-select"
+                                             @bind-Value="form.PaidBy"
+                                             disabled="@saving">
+                                    <option value="0">اختر الدافع</option>
+                                    @foreach (var person in activePeople)
+                                    {
+                                        <option value="@person.Id">
+                                            @person.FullName
+                                        </option>
+                                    }
+                                </InputSelect>
+                            </div>
+
+                            <div class="expense-field">
+                                <label class="form-label">تاريخ المصروف</label>
+                                <InputDate class="form-control"
+                                           @bind-Value="form.ExpenseDate"
+                                           disabled="@saving" />
+                            </div>
+                        </div>
+
+                        <div class="participants-section">
+                            <div class="participants-heading">
+                                <div>
+                                    <h6>المستفيدون من المصروف</h6>
+                                    <p>اختر الأشخاص الذين تُقسّم عليهم قيمة المصروف.</p>
+                                </div>
+
+                                <div class="participants-actions">
+                                    <span class="participants-count">
+                                        @form.ParticipantIds.Count من @activePeople.Count
+                                    </span>
+
+                                    <button type="button"
+                                            class="participants-select-all @(AllParticipantsSelected ? "is-selected" : "")"
+                                            @onclick="ToggleAllParticipants">
+                                        @(AllParticipantsSelected
+                                            ? "إلغاء تحديد الكل"
+                                            : "تحديد الكل")
+                                    </button>
+                                </div>
+                            </div>
+
+                            @if (activePeople.Count == 0)
+                            {
+                                <div class="expense-empty-note">
+                                    لا يوجد أشخاص نشطون. أضف الأشخاص أولًا.
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="participants-grid">
+                                    @foreach (var person in activePeople)
+                                    {
+                                        var isSelected =
+                                            form.ParticipantIds.Contains(person.Id);
+
+                                        <label class="participant-option @(isSelected ? "participant-selected" : "")"
+                                               @key="person.Id"
+                                               for="expense-person-@person.Id">
+
+                                            <input type="checkbox"
+                                                   id="expense-person-@person.Id"
+                                                   checked="@isSelected"
+                                                   disabled="@saving"
+                                                   @onchange="e => ToggleParticipant(person.Id, e)" />
+
+                                            <span class="participant-check">
+                                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                                    <path d="m5 12 4 4L19 6" />
+                                                </svg>
+                                            </span>
+
+                                            <span class="participant-name">
+                                                @person.FullName
+                                            </span>
+                                        </label>
+                                    }
+                                </div>
+                            }
+                        </div>
+
+                        <div class="expense-form-footer">
+                            <span class="expense-form-hint">
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <circle cx="12" cy="12" r="9" />
+                                    <path d="M12 11v5M12 8h.01" />
+                                </svg>
+                                سيتم تقسيم المبلغ بالتساوي بين المستفيدين.
+                            </span>
+
+                            <button type="submit"
+                                    class="btn btn-primary expense-save-button"
+                                    disabled="@saving">
+                                @if (saving)
+                                {
+                                    <span>جارٍ الحفظ...</span>
+                                }
+                                else
+                                {
+                                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                                        <path d="M5 3h12l4 4v14H3V3h2Z" />
+                                        <path d="M7 3v6h10V3M7 21v-8h10v8" />
+                                    </svg>
+                                    <span>حفظ المصروف</span>
+                                }
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </section>
+        </div>
+    }
+
+    @* اختيار الشهر *@
+    <section class="card shadow-sm mb-4 expense-month-card">
+        <div class="card-body">
+            <div class="expense-month-label">
+                <span class="month-icon">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <rect x="3" y="5" width="18" height="16" rx="2" />
+                        <path d="M16 3v4M8 3v4M3 10h18" />
+                    </svg>
+                </span>
+                <label class="form-label mb-0">عرض مصروفات الشهر</label>
+            </div>
+
+            <InputSelect class="form-select"
+                         @bind-Value="selectedMonthId"
+                         @bind-Value:after="MonthChangedAsync">
+                @foreach (var month in months)
+                {
+                    <option value="@month.Id">
+                        @month.MonthName @(month.IsArchived ? "(مؤرشف)" : "")
+                    </option>
+                }
+            </InputSelect>
+        </div>
+    </section>
+
+    @* سجل المصروفات *@
+    <section class="card shadow-sm expense-history-card">
+        <div class="expense-history-heading">
+            <div>
+                <h5>سجل المصروفات</h5>
+                <p>جميع المصروفات المسجلة في الشهر المحدد.</p>
+
+                <button type="button"
+                        class="btn btn-danger mt-4"
+                        disabled="@saving"
+                        @onclick="DeleteAllExpensesAsync">
+                    تصفير جميع المصروفات
+                </button>
+            </div>
+
+            <span class="expense-record-count">
+                @expenses.Count مصروف
+            </span>
+        </div>
+
+        @if (loadingExpenses)
+        {
+            <div class="expense-history-empty">
+                جارٍ تحميل المصروفات...
+            </div>
+        }
+        else if (expenses.Count == 0)
+        {
+            <div class="expense-history-empty">
+                <p>لا توجد مصروفات في هذا الشهر.</p>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive expense-table-wrap">
+                <table class="table table-hover expense-table">
+                    <thead>
+                        <tr>
+                            <th>التاريخ</th>
+                            <th>المصروف</th>
+                            <th>المبلغ</th>
+                            <th>الدافع</th>
+                            <th>المستفيدون</th>
+                            <th>الإجراء</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        @foreach (var expense in expenses)
+                        {
+                            <tr @key="expense.Id">
+                                <td>
+                                    <span class="expense-date">
+                                        @expense.ExpenseDate.ToString("yyyy-MM-dd")
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span class="expense-description-text">
+                                        @expense.Description
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span class="expense-amount">
+                                        @expense.Amount.ToString("N2") د.ل
+                                    </span>
+                                </td>
+
+                                <td>@expense.Payer.FullName</td>
+
+                                <td>
+                                    <div class="expense-participant-names">
+                                        @string.Join("، ",
+                                            expense.Participants.Select(p => p.Person.FullName))
+                                    </div>
+                                </td>
+
+                                <td>
+                                    @if (!selectedMonthArchived)
+                                    {
+                                        <button class="btn btn-sm btn-outline-danger expense-delete-button"
+                                                disabled="@saving"
+                                                @onclick="() => DeleteExpenseAsync(expense.Id)">
+                                            حذف
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <span class="archived-label">مؤرشف</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+
+                    <tfoot>
+                        <tr>
+                            <th colspan="2">الإجمالي</th>
+                            <th>@expenses.Sum(e => e.Amount).ToString("N2") د.ل</th>
+                            <th colspan="3"></th>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        }
+    </section>
+</div>
+
+@code {
+    private ExpenseForm form = new();
+    private List<Person> activePeople = new();
+    private List<HousingMonth> months = new();
+    private List<Expense> expenses = new();
+
+    private int selectedMonthId;
+    private bool selectedMonthArchived;
+    private bool saving;
+    private bool loadingExpenses;
+    private bool showAddExpenseModal;
+
+    private string message = string.Empty;
+    private string messageClass = "alert-info";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            activePeople = await PersonService.GetActiveAsync();
+
+            months = await DbContext.Months
+                .AsNoTracking()
+                .OrderByDescending(m => m.StartDate)
+                .ToListAsync();
+
+            var currentMonth = months.FirstOrDefault(m => !m.IsArchived);
+
+            if (currentMonth is not null)
+                selectedMonthId = currentMonth.Id;
+
+            await LoadExpensesAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex);
+            ShowMessage($"تعذر تحميل البيانات: {ex.Message}", false);
+        }
+    }
+
+    private void OpenAddExpenseModal()
+    {
+        if (saving)
+            return;
+
+        if (selectedMonthId <= 0 || selectedMonthArchived)
+        {
+            ShowMessage("لا يوجد شهر مفتوح لإضافة المصروفات.", false);
+            return;
+        }
+
+        form = new ExpenseForm();
+        message = string.Empty;
+        showAddExpenseModal = true;
+    }
+
+    private void CloseAddExpenseModal()
+    {
+        if (!saving)
+            showAddExpenseModal = false;
+    }
+
+    private void ToggleParticipant(int personId, ChangeEventArgs e)
+    {
+        bool selected = e.Value is bool value && value;
+        var updatedIds = form.ParticipantIds.ToList();
+
+        if (selected)
+        {
+            if (!updatedIds.Contains(personId))
+                updatedIds.Add(personId);
+        }
+        else
+        {
+            updatedIds.Remove(personId);
+        }
+
+        form.ParticipantIds = updatedIds;
+    }
+
+    private bool AllParticipantsSelected =>
+        activePeople.Count > 0 &&
+        activePeople.All(p => form.ParticipantIds.Contains(p.Id));
+
+    private void ToggleAllParticipants()
+    {
+        if (AllParticipantsSelected)
+        {
+            form.ParticipantIds = new List<int>();
+        }
+        else
+        {
+            form.ParticipantIds = activePeople
+                .Select(p => p.Id)
+                .ToList();
+        }
+    }
+
+    private async Task AddExpenseAsync()
+    {
+        if (saving)
+            return;
+
+        if (selectedMonthId <= 0 || selectedMonthArchived)
+        {
+            ShowMessage("لا يوجد شهر مفتوح. اختر شهرًا مفتوحًا أولًا.", false);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(form.Description) ||
+            form.Amount <= 0 ||
+            form.PaidBy <= 0 ||
+            form.ParticipantIds.Count == 0)
+        {
+            ShowMessage("أكمل بيانات المصروف وحدد الدافع والمستفيدين.", false);
+            return;
+        }
+
+        saving = true;
+
+        try
+        {
+            bool added = await ExpenseService.AddAsync(
+                selectedMonthId,
+                form.Description,
+                form.Amount,
+                form.PaidBy,
+                form.ParticipantIds,
+                form.ExpenseDate);
+
+            if (!added)
+            {
+                ShowMessage("تعذرت إضافة المصروف. تحقق من البيانات والشهر.", false);
+                return;
+            }
+
+            form = new ExpenseForm();
+
+            await LoadExpensesAsync();
+
+            showAddExpenseModal = false;
+            ShowMessage("تم حفظ المصروف بنجاح.", true);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex);
+            ShowMessage($"حدث خطأ أثناء حفظ المصروف: {ex.Message}", false);
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private async Task DeleteExpenseAsync(long expenseId)
+    {
+        if (saving)
+            return;
+
+        bool confirmed = await JS.InvokeAsync<bool>(
+            "confirm",
+            "هل تريد حذف هذا المصروف؟ ستُحذف حصص المستفيدين المرتبطة به أيضًا.");
+
+        if (!confirmed)
+            return;
+
+        saving = true;
+
+        try
+        {
+            bool deleted = await ExpenseService.DeleteAsync(expenseId);
+
+            if (!deleted)
+            {
+                ShowMessage("تعذر حذف المصروف أو أن الشهر مؤرشف.", false);
+                return;
+            }
+
+            await LoadExpensesAsync();
+            ShowMessage("تم حذف المصروف.", true);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex);
+            ShowMessage($"حدث خطأ أثناء حذف المصروف: {ex.Message}", false);
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private async Task MonthChangedAsync()
+    {
+        await LoadExpensesAsync();
+    }
+
+    private async Task LoadExpensesAsync()
+    {
+        loadingExpenses = true;
+
+        try
+        {
+            var month = months.FirstOrDefault(m => m.Id == selectedMonthId);
+            selectedMonthArchived = month?.IsArchived ?? true;
+
+            expenses = selectedMonthId > 0
+                ? await ExpenseService.GetByMonthAsync(selectedMonthId)
+                : new List<Expense>();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex);
+            ShowMessage($"تعذر تحميل المصروفات: {ex.Message}", false);
+        }
+        finally
+        {
+            loadingExpenses = false;
+        }
+    }
+
+    private CancellationTokenSource? toastCts;
+
+    private async void ShowMessage(string text, bool success)
+    {
+        toastCts?.Cancel();
+        toastCts?.Dispose();
+
+        toastCts = new CancellationTokenSource();
+        var token = toastCts.Token;
+
+        message = text;
+        messageClass = success ? "alert-success" : "alert-danger";
+
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            await Task.Delay(2000, token);
+
+            message = string.Empty;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    private async Task DeleteAllExpensesAsync()
+    {
+        if (saving)
+            return;
+
+        bool confirmed = await JS.InvokeAsync<bool>(
+            "confirm",
+            "تحذير: سيتم حذف جميع المصروفات وحصص المستفيدين من جميع الأشهر نهائيًا. هل تريد المتابعة؟");
+
+        if (!confirmed)
+            return;
+
+        saving = true;
+
+        try
+        {
+            int deletedCount = await ExpenseService.DeleteAllAsync();
+
+            await LoadExpensesAsync();
+
+            ShowMessage(
+                deletedCount > 0
+                    ? $"تم تصفير الحسابات وحذف {deletedCount} مصروف."
+                    : "لا توجد مصروفات لحذفها.",
+                true);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex);
+            ShowMessage("تعذر تصفير المصروفات. راجع سجل الأخطاء.", false);
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private sealed class ExpenseForm
+    {
+        public string Description { get; set; } = string.Empty;
+        public decimal Amount { get; set; }
+        public int PaidBy { get; set; }
+        public DateTime ExpenseDate { get; set; } = DateTime.Today;
+        public List<int> ParticipantIds { get; set; } = new();
+    }
+}

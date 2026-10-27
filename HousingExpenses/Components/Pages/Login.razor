@@ -1,0 +1,384 @@
+﻿@page "/"
+@inject NavigationManager Navigation
+
+<PageTitle>تسجيل الدخول</PageTitle>
+
+<div class="login-container" dir="rtl">
+    <div class="login-card">
+
+        <div class="login-logo">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 10.5 12 3l9 7.5" />
+                <path d="M5.5 9.5V21h13V9.5" />
+                <path d="M9 21v-7h6v7" />
+            </svg>
+        </div>
+
+        <div class="login-heading">
+            <h1>مصروفات السكن</h1>
+            <p>مرحبًا بك، أدخل كلمة السر للمتابعة</p>
+        </div>
+
+        <form @onsubmit="CheckPasswordAsync" @onsubmit:preventDefault>
+            <label for="password" class="login-label">
+                كلمة السر
+            </label>
+
+            <div class="login-input-wrapper">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="4" y="10" width="16" height="11" rx="2" />
+                    <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+                </svg>
+
+                <input @ref="passwordInput"
+                       id="password"
+                       type="@(showPassword ? "text" : "password")"
+                       class="login-input"
+                       placeholder="أدخل كلمة السر"
+                       @bind="password"
+                       autocomplete="current-password"
+                       autofocus
+                       disabled="@isLoggingIn" />
+
+                <button type="button"
+                        class="password-toggle"
+                        @onclick="TogglePassword"
+                        disabled="@isLoggingIn"
+                        aria-label="إظهار أو إخفاء كلمة السر">
+                    @(showPassword ? "إخفاء" : "إظهار")
+                </button>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(errorMessage))
+            {
+                <div class="login-error">
+                    <span>!</span>
+                    @errorMessage
+                </div>
+            }
+
+            <button type="submit"
+                    class="login-submit"
+                    disabled="@isLoggingIn">
+
+                @if (isLoggingIn)
+                {
+                    <span>جاري التحقق...</span>
+                    <span class="login-spinner" aria-hidden="true"></span>
+                }
+                else
+                {
+                    <span>دخول إلى النظام</span>
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M19 12H5" />
+                        <path d="m12 19-7-7 7-7" />
+                    </svg>
+                }
+            </button>
+        </form>
+
+        <div class="login-footer">
+            <span class="login-footer-line"></span>
+            <span>نظام إدارة مصروفات السكن</span>
+            <span class="login-footer-line"></span>
+        </div>
+
+    </div>
+</div>
+
+<style>
+    .login-container {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background: radial-gradient(circle at 15% 15%, rgba(237, 125, 43, 0.08), transparent 32%), radial-gradient(circle at 85% 85%, rgba(237, 125, 43, 0.06), transparent 30%), #f5f7fa;
+    }
+
+    .login-card {
+        width: 100%;
+        max-width: 420px;
+        padding: 38px 34px 25px;
+        background: #fff;
+        border: 1px solid #e8edf2;
+        border-radius: 20px;
+        box-shadow: 0 14px 45px rgba(38, 52, 69, 0.08);
+    }
+
+    .login-logo {
+        width: 66px;
+        height: 66px;
+        display: grid;
+        place-items: center;
+        margin: 0 auto 22px;
+        border-radius: 19px;
+        background: #fff0e4;
+        color: #ed7d2b;
+    }
+
+        .login-logo svg {
+            width: 34px;
+            height: 34px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 1.7;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+    .login-heading {
+        text-align: center;
+        margin-bottom: 30px;
+    }
+
+        .login-heading h1 {
+            margin: 0 0 9px;
+            color: #263445;
+            font-size: 23px;
+            font-weight: 800;
+        }
+
+        .login-heading p {
+            margin: 0;
+            color: #8490a0;
+            font-size: 13px;
+        }
+
+    .login-label {
+        display: block;
+        margin-bottom: 9px;
+        color: #344256;
+        font-size: 13px;
+        font-weight: 700;
+    }
+
+    .login-input-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 52px;
+        padding: 0 13px;
+        border: 1px solid #dfe5ed;
+        border-radius: 11px;
+        background: #fff;
+        transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+        .login-input-wrapper:focus-within {
+            border-color: #ed7d2b;
+            box-shadow: 0 0 0 3px rgba(237, 125, 43, 0.12);
+        }
+
+        .login-input-wrapper > svg {
+            width: 21px;
+            height: 21px;
+            flex-shrink: 0;
+            fill: none;
+            stroke: #929eae;
+            stroke-width: 1.7;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+    .login-input {
+        width: 100%;
+        min-width: 0;
+        height: 48px;
+        padding: 0;
+        border: 0;
+        outline: none;
+        background: transparent;
+        color: #263445;
+        font: inherit;
+        font-size: 15px;
+        direction: ltr;
+        text-align: center;
+    }
+
+        .login-input:focus {
+            outline: none;
+            box-shadow: none;
+        }
+
+        .login-input::placeholder {
+            color: #aab3bf;
+            font-size: 13px;
+        }
+
+    .password-toggle {
+        flex-shrink: 0;
+        padding: 5px;
+        border: 0;
+        background: transparent;
+        color: #c96520;
+        font-family: inherit;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+        .password-toggle:hover {
+            color: #d96516;
+        }
+
+        .password-toggle:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+    .login-error {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        margin-top: 13px;
+        padding: 10px 12px;
+        border: 1px solid #f4c9ce;
+        border-radius: 9px;
+        background: #fff1f2;
+        color: #b42332;
+        font-size: 13px;
+    }
+
+        .login-error span {
+            display: grid;
+            width: 20px;
+            height: 20px;
+            flex-shrink: 0;
+            place-items: center;
+            border-radius: 50%;
+            background: #fbdadd;
+            font-weight: 800;
+        }
+
+    .login-submit {
+        width: 100%;
+        min-height: 49px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        margin-top: 22px;
+        padding: 12px 18px;
+        border: 1px solid #ed7d2b;
+        border-radius: 11px;
+        background: #ed7d2b;
+        color: #fff;
+        font-family: inherit;
+        font-size: 14px;
+        font-weight: 750;
+        cursor: pointer;
+        transition: background 0.2s, transform 0.2s;
+    }
+
+        .login-submit:hover:not(:disabled) {
+            background: #d96516;
+            border-color: #d96516;
+        }
+
+        .login-submit:active:not(:disabled) {
+            transform: scale(0.99);
+        }
+
+        .login-submit:disabled {
+            opacity: 0.8;
+            cursor: not-allowed;
+        }
+
+        .login-submit svg {
+            width: 19px;
+            height: 19px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 1.8;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+    .login-spinner {
+        width: 16px;
+        height: 16px;
+        flex-shrink: 0;
+        border: 2px solid rgba(255, 255, 255, 0.4);
+        border-top-color: #fff;
+        border-radius: 50%;
+        animation: login-spin 0.7s linear infinite;
+    }
+
+    @@keyframes login-spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    .login-footer {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        margin-top: 28px;
+        color: #9aa4b2;
+        font-size: 11px;
+        white-space: nowrap;
+    }
+
+    .login-footer-line {
+        width: 22px;
+        height: 1px;
+        background: #e5eaf0;
+    }
+</style>
+
+@code {
+    private string password = string.Empty;
+    private string errorMessage = string.Empty;
+    private bool showPassword;
+    private bool isLoggingIn;
+    private ElementReference passwordInput;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await passwordInput.FocusAsync();
+        }
+    }
+
+    private void TogglePassword()
+    {
+        if (!isLoggingIn)
+            showPassword = !showPassword;
+    }
+
+    private async Task CheckPasswordAsync()
+    {
+        if (isLoggingIn)
+            return;
+
+        isLoggingIn = true;
+        errorMessage = string.Empty;
+
+        // السماح للواجهة بعرض حالة التحقق قبل فحص كلمة السر.
+        await InvokeAsync(StateHasChanged);
+        await Task.Yield();
+
+        try
+        {
+            if (password == "112233")
+            {
+                Navigation.NavigateTo("/expenses");
+                return;
+            }
+
+            errorMessage = "كلمة السر غير صحيحة، حاول مرة أخرى.";
+            password = string.Empty;
+        }
+        finally
+        {
+            isLoggingIn = false;
+        }
+
+        await InvokeAsync(StateHasChanged);
+        await passwordInput.FocusAsync();
+    }
+}
